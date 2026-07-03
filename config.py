@@ -39,163 +39,185 @@ TMPL = '''
     width: 1280px;
     min-height: 720px;
     padding: 44px;
-    background: #f4f7fb;
+    background: #15171b;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    color: #1f2933;
+    color: #f8fafc;
     box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
 ">
     <div style="
+        height: 100%;
+        min-height: 632px;
         display: flex;
-        align-items: center;
+        flex-direction: column;
+        justify-content: space-between;
         gap: 28px;
-        padding: 32px;
-        border-radius: 22px;
-        background: #ffffff;
-        box-shadow: 0 18px 48px rgba(31, 41, 51, 0.12);
     ">
         <div style="
-            width: 150px;
-            height: 150px;
-            border-radius: 24px;
-            overflow: hidden;
-            background: #e5e9ef;
-            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 30px;
+            padding-bottom: 22px;
+            border-bottom: 2px solid rgba(148, 163, 184, 0.22);
         ">
-            {% if avatar_url %}
-            <img src="{{ avatar_url }}" style="
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-                display: block;
-            ">
-            {% else %}
             <div style="
-                width: 100%;
-                height: 100%;
                 display: flex;
                 align-items: center;
-                justify-content: center;
+                gap: 28px;
+                min-width: 0;
+            ">
+                <div style="
+                    width: 150px;
+                    height: 150px;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    background: #2b3038;
+                    border: 3px solid rgba(226, 232, 240, 0.55);
+                    flex-shrink: 0;
+                ">
+                    {% if avatar_url %}
+                    <img src="{{ avatar_url }}" style="
+                        width: 100%;
+                        height: 100%;
+                        object-fit: cover;
+                        display: block;
+                    ">
+                    {% else %}
+                    <div style="
+                        width: 100%;
+                        height: 100%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 24px;
+                        color: #94a3b8;
+                    ">头像</div>
+                    {% endif %}
+                </div>
+
+                <div style="min-width: 0;">
+                    <div style="
+                        font-size: 24px;
+                        color: #38bdf8;
+                        font-weight: 700;
+                        letter-spacing: 0;
+                    ">RHODES ISLAND TERMINAL</div>
+                    <div style="
+                        margin-top: 8px;
+                        font-size: 52px;
+                        font-weight: 850;
+                        line-height: 1.12;
+                        color: #ffffff;
+                        word-break: break-all;
+                    ">{{ nickname }}</div>
+                    <div style="
+                        margin-top: 12px;
+                        font-size: 26px;
+                        color: #cbd5e1;
+                    ">UID {{ uid }} · {{ channel_name or '未返回' }}</div>
+                </div>
+            </div>
+
+            <div style="
+                flex-shrink: 0;
+                text-align: right;
+                color: #94a3b8;
                 font-size: 24px;
-                color: #6b7280;
-            ">头像</div>
-            {% endif %}
+                line-height: 1.45;
+            ">
+                <div style="color: #e2e8f0; font-weight: 800;">明日方舟基础信息</div>
+                <div>DATA SNAPSHOT</div>
+            </div>
         </div>
 
-        <div style="flex: 1; min-width: 0;">
+        <div style="
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+        ">
             <div style="
-                font-size: 24px;
-                color: #64748b;
-                margin-bottom: 8px;
-            "></div>
+                padding: 24px;
+                border-radius: 8px;
+                background: #232832;
+                border-left: 6px solid #38bdf8;
+            ">
+                <div style="font-size: 22px; color: #94a3b8;">玩家等级</div>
+                <div style="margin-top: 12px; font-size: 42px; font-weight: 850;">
+                    {{ level }}
+                </div>
+            </div>
 
             <div style="
-                font-size: 48px;
-                font-weight: 800;
-                color: #111827;
-                line-height: 1.2;
-                word-break: break-all;
-            ">{{ nickname }}</div>
+                padding: 24px;
+                border-radius: 8px;
+                background: #232832;
+                border-left: 6px solid #22c55e;
+            ">
+                <div style="font-size: 22px; color: #94a3b8;">注册日期</div>
+                <div style="margin-top: 12px; font-size: 34px; font-weight: 780;">
+                    {{ registered_at }}
+                </div>
+            </div>
 
-            {% if uid %}
             <div style="
-                margin-top: 12px;
-                font-size: 26px;
-                color: #64748b;
-            ">UID：{{ uid }}</div>
-            {% endif %}
-        </div>
-    </div>
-
-    <div style="
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 18px;
-        margin-top: 26px;
-    ">
-        <div style="
-            padding: 24px;
-            border-radius: 20px;
-            background: #ffffff;
-            box-shadow: 0 10px 28px rgba(31, 41, 51, 0.08);
-        ">
-            <div style="font-size: 22px; color: #64748b;">玩家等级</div>
-            <div style="margin-top: 12px; font-size: 38px; font-weight: 800;">
-                {{ level }}
+                padding: 24px;
+                border-radius: 8px;
+                background: #232832;
+                border-left: 6px solid #f59e0b;
+            ">
+                <div style="font-size: 22px; color: #94a3b8;">主线进度</div>
+                <div style="margin-top: 12px; font-size: 34px; font-weight: 780;">
+                    {{ mainline }}
+                </div>
             </div>
-        </div>
 
-        <div style="
-            padding: 24px;
-            border-radius: 20px;
-            background: #ffffff;
-            box-shadow: 0 10px 28px rgba(31, 41, 51, 0.08);
-        ">
-            <div style="font-size: 22px; color: #64748b;">注册日期</div>
-            <div style="margin-top: 12px; font-size: 34px; font-weight: 750;">
-                {{ registered_at }}
+            <div style="
+                padding: 24px;
+                border-radius: 8px;
+                background: #232832;
+                border-left: 6px solid #a78bfa;
+            ">
+                <div style="font-size: 22px; color: #94a3b8;">渠道</div>
+                <div style="margin-top: 12px; font-size: 34px; font-weight: 780;">
+                    {{ channel_name or '未返回' }}
+                </div>
             </div>
-        </div>
 
-        <div style="
-            padding: 24px;
-            border-radius: 20px;
-            background: #ffffff;
-            box-shadow: 0 10px 28px rgba(31, 41, 51, 0.08);
-        ">
-            <div style="font-size: 22px; color: #64748b;">主线进度</div>
-            <div style="margin-top: 12px; font-size: 34px; font-weight: 750;">
-                {{ mainline }}
+            <div style="
+                grid-column: span 2;
+                padding: 24px;
+                border-radius: 8px;
+                background: #232832;
+                border-left: 6px solid #ef4444;
+            ">
+                <div style="font-size: 22px; color: #94a3b8;">理智恢复时间</div>
+                <div style="margin-top: 12px; font-size: 38px; font-weight: 820;">
+                    {{ recovery_time }}
+                </div>
             </div>
-        </div>
 
-        <div style="
-            padding: 24px;
-            border-radius: 20px;
-            background: #ffffff;
-            box-shadow: 0 10px 28px rgba(31, 41, 51, 0.08);
-        ">
-            <div style="font-size: 22px; color: #64748b;">渠道</div>
-            <div style="margin-top: 12px; font-size: 34px; font-weight: 750;">
-                {{ channel_name or '未返回' }}
+            <div style="
+                padding: 24px;
+                border-radius: 8px;
+                background: #232832;
+                border-left: 6px solid #06b6d4;
+            ">
+                <div style="font-size: 22px; color: #94a3b8;">干员数</div>
+                <div style="margin-top: 12px; font-size: 42px; font-weight: 850;">
+                    {{ char_count }}
+                </div>
             </div>
-        </div>
 
-        <div style="
-            padding: 24px;
-            border-radius: 20px;
-            background: #ffffff;
-            box-shadow: 0 10px 28px rgba(31, 41, 51, 0.08);
-        ">
-            <div style="font-size: 22px; color: #64748b;">理智恢复时间</div>
-            <div style="margin-top: 12px; font-size: 34px; font-weight: 750;">
-                {{ recovery_time }}
-            </div>
-        </div>
-
-        <div style="
-            padding: 24px;
-            border-radius: 20px;
-            background: #ffffff;
-            box-shadow: 0 10px 28px rgba(31, 41, 51, 0.08);
-        ">
-            <div style="font-size: 22px; color: #64748b;">干员数</div>
-            <div style="margin-top: 12px; font-size: 38px; font-weight: 800;">
-                {{ char_count }}
-            </div>
-        </div>
-
-        <div style="
-            padding: 24px;
-            border-radius: 20px;
-            background: #ffffff;
-            box-shadow: 0 10px 28px rgba(31, 41, 51, 0.08);
-        ">
-            <div style="font-size: 22px; color: #64748b;">时装数</div>
-            <div style="margin-top: 12px; font-size: 38px; font-weight: 800;">
-                {{ skin_count }}
+            <div style="
+                padding: 24px;
+                border-radius: 8px;
+                background: #232832;
+                border-left: 6px solid #ec4899;
+            ">
+                <div style="font-size: 22px; color: #94a3b8;">时装数</div>
+                <div style="margin-top: 12px; font-size: 42px; font-weight: 850;">
+                    {{ skin_count }}
+                </div>
             </div>
         </div>
     </div>

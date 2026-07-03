@@ -594,7 +594,7 @@ class MyPlugin(Star):
         binding = data.get(user_id)
         if not binding:
             yield event.plain_result(
-                "你还没有绑定账号，请先私聊发送：\n"
+                "你还没有绑定账号，请先发送：\n"
                 f"{config.BIND_FORMAT}"
             )
             return
@@ -629,18 +629,26 @@ class MyPlugin(Star):
         except Exception as exc:
             logger.warning(f"渲染明日方舟基础信息图片失败：{exc}")
             yield event.plain_result(
-                f"抱歉，查询失败，请稍后重试"
+                "抱歉，查询失败，请稍后重试"
             )
+            return
 
         yield event.image_result(image)
 
     @filter.command("帮助")
     async def help(self, event: AstrMessageEvent):
-        yield event.plain_result(
-            f"/绑定账号 电话号码 账号密码 /n"
-            f"/查询基础信息"
-        )
+        """发送明日方舟助手命令帮助。
 
+        Args:
+            event: AstrBot 消息事件。
+        """
+        yield event.plain_result(
+            "明日方舟助手命令\n"
+            f"{config.BIND_FORMAT}\n"
+            "/查询基础信息\n"
+            "/帮助\n"
+            "绑定会使用森空岛账号登录，只保存查询所需凭据和角色 UID。"
+        )
 
     async def terminate(self):
         """在 AstrBot 卸载插件前清理插件资源。"""
