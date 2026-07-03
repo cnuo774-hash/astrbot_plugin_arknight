@@ -621,9 +621,9 @@ class MyPlugin(Star):
                 card_data,
                 return_url=True,
                 options={
-                    "full_page": False,
+                    "full_page": True,
                     "type": "png",
-                    "viewport": {"width": 1280, "height": 520},
+                    "viewport": {"width": 1280, "height": 480},
                 },
             )
         except Exception as exc:

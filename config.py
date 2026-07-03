@@ -35,6 +35,13 @@ BIND_PROMPT = (
     "不会保存密码。"
 )
 TMPL = '''
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    background: #15171b;
+}
+</style>
 <div style="
     width: 1280px;
     padding: 36px;
