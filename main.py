@@ -13,7 +13,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 
-import config
+from . import config
 
 
 @register(
