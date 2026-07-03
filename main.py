@@ -575,7 +575,11 @@ class MyPlugin(Star):
                 config.TMPL,
                 card_data,
                 return_url=True,
-                options={"full_page": True, "type": "png"},
+                options={
+                    "full_page": True,
+                    "type": "png",
+                    "viewport": {"width": 1280, "height": 720},
+                },
             )
         except Exception as exc:
             logger.warning(f"渲染明日方舟基础信息图片失败：{exc}")
