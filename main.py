@@ -465,6 +465,45 @@ class MyPlugin(Star):
             )
             or "未返回"
         )
+        status = self._find_value(player_info, ("status",))
+        status = status if isinstance(status, dict) else {}
+        ap = status.get("ap") or self._find_value(player_info, ("ap",))
+        recovery_time = "未返回"
+        if isinstance(ap, dict):
+            current_ap = ap.get("current")
+            max_ap = ap.get("max")
+            complete_recovery_time = ap.get("completeRecoveryTime")
+            if complete_recovery_time not in (None, ""):
+                complete_recovery_time = int(complete_recovery_time)
+                timestamp = (
+                    complete_recovery_time / 1000
+                    if complete_recovery_time > 10_000_000_000
+                    else complete_recovery_time
+                )
+                if timestamp <= datetime.now().timestamp():
+                    recovery_time = "已回满"
+                elif max_ap is not None and current_ap is not None:
+                    recovery_time = (
+                        "已回满"
+                        if int(current_ap) >= int(max_ap)
+                        else datetime.fromtimestamp(timestamp).strftime(
+                            "%Y-%m-%d %H:%M"
+                        )
+                    )
+                else:
+                    recovery_time = datetime.fromtimestamp(timestamp).strftime(
+                        "%Y-%m-%d %H:%M"
+                    )
+        char_count = (
+            status.get("charCnt")
+            or self._find_value(player_info, ("charCnt", "charCount"))
+            or "未返回"
+        )
+        skin_count = (
+            status.get("skinCnt")
+            or self._find_value(player_info, ("skinCnt", "skinCount"))
+            or "未返回"
+        )
         avatar_value = self._find_value(
             player_info,
             ("avatar", "avatarUrl", "avatarImage", "icon"),
@@ -476,6 +515,9 @@ class MyPlugin(Star):
             "level": level,
             "registered_at": registered_at,
             "mainline": mainline,
+            "recovery_time": recovery_time,
+            "char_count": char_count,
+            "skin_count": skin_count,
             "avatar_url": avatar_url,
             "channel_name": binding.get("channelName") or "未返回",
         }
@@ -486,6 +528,9 @@ class MyPlugin(Star):
             f"玩家等级：{level}\n"
             f"注册日期：{registered_at}\n"
             f"主线进度：{mainline}\n"
+            f"理智恢复时间：{recovery_time}\n"
+            f"干员数：{char_count}\n"
+            f"时装数：{skin_count}\n"
             f"头像：{avatar_url or '未返回'}"
         )
         return text, card_data
@@ -588,6 +633,14 @@ class MyPlugin(Star):
             )
 
         yield event.image_result(image)
+
+    @filter.command("帮助")
+    async def help(self, event: AstrMessageEvent):
+        yield event.plain_result(
+            f"/绑定账号 电话号码 账号密码 /n"
+            f"/查询基础信息"
+        )
+
 
     async def terminate(self):
         """在 AstrBot 卸载插件前清理插件资源。"""
