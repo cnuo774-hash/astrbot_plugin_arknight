@@ -10,8 +10,6 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.platform.message_type import MessageType
 
 from . import config
 
@@ -454,47 +452,20 @@ class MyPlugin(Star):
         return text, card_data
 
     @filter.command("绑定账号")
-    async def bind_arknight_account(self, event: AstrMessageEvent, text: str = ""):
+    async def bind_arknight_account(
+        self,
+        event: AstrMessageEvent,
+        phone: str,
+        password: str,
+    ):
         """将发送者绑定到森空岛明日方舟账号。
 
         Args:
             event: AstrBot 消息事件。
-            text: 私聊命令参数，格式为“手机号 密码”。
+            phone: 森空岛账号手机号。
+            password: 森空岛账号密码。
         """
         user_id = event.get_sender_id()
-        if event.get_group_id():
-            sent_private = False
-            try:
-                private_session = MessageSession(
-                    platform_name=event.get_platform_id(),
-                    message_type=MessageType.FRIEND_MESSAGE,
-                    session_id=user_id,
-                )
-                sent_private = await self.context.send_message(
-                    private_session,
-                    MessageChain().message(config.BIND_PROMPT),
-                )
-            except Exception as exc:
-                logger.warning(f"发送私聊绑定提示失败：{exc}")
-
-            if sent_private:
-                yield event.plain_result(
-                    "绑定需要私密信息，"
-                    "我已经把输入格式发到你的私聊了。"
-                )
-            else:
-                yield event.plain_result(
-                    "绑定需要私密信息，请私聊我发送：\n"
-                    f"{config.BIND_FORMAT}"
-                )
-            return
-
-        parts = text.strip().split(maxsplit=1)
-        if len(parts) != 2:
-            yield event.plain_result(config.BIND_PROMPT)
-            return
-
-        phone, password = parts
         try:
             credential = await self._create_skland_credential(phone, password)
             role = await self._get_arknights_role(credential)
