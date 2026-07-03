@@ -14,15 +14,19 @@ PLAYER_URL = "https://zonai.skland.com/api/v1/game/player/info"
 
 REQUEST_TIMEOUT = 15
 SKLAND_USER_AGENT = (
-    "Skland/1.0.0 (com.hypergryph.skland; Android) "
-    "AstrBot-Arknight-Helper/1.0.0"
+    "Skland/1.32.1 (com.hypergryph.skland; build:103201004; "
+    "Android 33; ) Okhttp/4.11.0"
 )
 DEFAULT_HEADERS = {
     "User-Agent": SKLAND_USER_AGENT,
     "Content-Type": "application/json",
 }
+SKLAND_SIGN_HEADERS = {
+    "User-Agent": SKLAND_USER_AGENT,
+    "Connection": "close",
+}
 
-BIND_FORMAT = "绑定账号 手机号 密码"
+BIND_FORMAT = "/绑定账号 手机号 密码"
 BIND_PROMPT = (
     "绑定需要使用森空岛账号的私密信息，请在私聊中发送：\n"
     f"{BIND_FORMAT}\n"

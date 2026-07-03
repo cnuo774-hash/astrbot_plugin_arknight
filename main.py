@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 from datetime import datetime
 from typing import Any
@@ -9,7 +11,6 @@ from urllib import error, parse, request
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
-from astrbot.core.message.message_event_result import MessageChain
 
 from . import config
 
@@ -247,21 +248,58 @@ class MyPlugin(Star):
             raise ValueError("森空岛凭据生成失败：未返回 cred")
         return {"cred": cred, "token": skland_token}
 
-    def _skland_headers(self, binding: dict[str, Any]) -> dict[str, str]:
-        """根据已存储的绑定数据构造森空岛请求头。
+    def _skland_headers(
+        self,
+        binding: dict[str, Any],
+        url: str,
+        params: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        """根据已存储的绑定数据构造森空岛签名请求头。
 
         Args:
             binding: 已存储的账号绑定数据。
+            url: API 接口地址。
+            params: 可选查询参数。
 
         Returns:
-            森空岛官方 API 请求头。
+            森空岛官方 API 签名请求头。
+
+        Raises:
+            ValueError: 当凭据缺少签名所需 token 时抛出。
         """
-        headers = dict(config.DEFAULT_HEADERS)
-        headers["cred"] = str(binding.get("cred", ""))
+        cred = str(binding.get("cred", ""))
         token = binding.get("token")
-        if token:
-            headers["token"] = str(token)
-        return headers
+        if not token:
+            raise ValueError("森空岛请求签名失败：缺少 token")
+
+        signed_url = url
+        if params:
+            signed_url = f"{url}?{parse.urlencode(params)}"
+        parsed_url = parse.urlparse(signed_url)
+        timestamp = int(datetime.now().timestamp()) - 1
+        header_for_sign = {
+            "platform": "",
+            "timestamp": str(timestamp),
+            "dId": "",
+            "vName": "",
+        }
+        header_ca_str = json.dumps(header_for_sign, separators=(",", ":"))
+        secret = (
+            f"{parsed_url.path}{parsed_url.query}"
+            f"{timestamp}{header_ca_str}"
+        )
+        hex_secret = hmac.new(
+            str(token).encode("utf-8"),
+            secret.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        signature = hashlib.md5(hex_secret.encode("utf-8")).hexdigest()
+        return {
+            **config.SKLAND_SIGN_HEADERS,
+            "cred": cred,
+            "sign": signature,
+            **header_for_sign,
+        }
 
     def _find_value(self, data: Any, keys: tuple[str, ...]) -> Any:
         """在嵌套接口数据中查找第一个匹配字段值。
@@ -353,7 +391,7 @@ class MyPlugin(Star):
         """
         data = await self._get_json(
             config.BINDING_URL,
-            self._skland_headers(credential),
+            self._skland_headers(credential, config.BINDING_URL),
             "森空岛角色绑定查询",
         )
 
@@ -385,11 +423,12 @@ class MyPlugin(Star):
         if not uid:
             raise ValueError("查询失败：未找到已绑定的明日方舟 UID")
 
+        params = {"uid": uid, "appCode": config.ARKNIGHTS_APP_CODE}
         data = await self._get_json(
             config.PLAYER_URL,
-            self._skland_headers(binding),
+            self._skland_headers(binding, config.PLAYER_URL, params),
             "森空岛基础信息查询",
-            {"uid": uid, "appCode": config.ARKNIGHTS_APP_CODE},
+            params,
         )
         return data if isinstance(data, dict) else {"raw": data}
 
