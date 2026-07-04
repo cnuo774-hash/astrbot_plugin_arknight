@@ -878,6 +878,61 @@ class MyPlugin(Star):
             self._format_rogue_record(topic_name, topic_id, rogue_data)
         )
 
+    @filter.command("调试肉鸽JSON")
+    async def debug_rogue_json(
+        self,
+        event: AstrMessageEvent,
+        topic: str = "默认",
+    ):
+        """输出肉鸽接口返回的原始 JSON，便于确认字段结构。
+
+        Args:
+            event: AstrBot 消息事件。
+            topic: 可选肉鸽主题名或原始 topicId。
+        """
+        user_id = event.get_sender_id()
+        data = self._read_bindings()
+        binding = data.get(user_id)
+        if not binding:
+            yield event.plain_result(
+                "你还没有绑定账号，请先发送：\n"
+                f"{config.BIND_FORMAT}"
+            )
+            return
+        if isinstance(binding, str):
+            yield event.plain_result(
+                "当前绑定数据是旧格式，无法调用森空岛官方 API 查询。"
+                "请重新发送：\n"
+                f"{config.BIND_FORMAT}"
+            )
+            return
+
+        topic_name = topic.strip() or "默认"
+        topic_id = config.ROGUE_TOPICS.get(topic_name, topic_name)
+        try:
+            rogue_data = await self._get_rogue_record(binding, topic_id)
+        except ValueError as exc:
+            logger.warning(f"调试明日方舟肉鸽 JSON 失败：{exc}")
+            yield event.plain_result(str(exc))
+            return
+
+        json_text = json.dumps(rogue_data, ensure_ascii=False, indent=2)
+        header = f"肉鸽 JSON（{topic_name} / {topic_id}）\n"
+        chunk_size = 1500
+        chunks = [
+            json_text[index : index + chunk_size]
+            for index in range(0, len(json_text), chunk_size)
+        ]
+        for index, chunk in enumerate(chunks[:6], start=1):
+            prefix = header if index == 1 else ""
+            yield event.plain_result(
+                f"{prefix}第 {index}/{len(chunks)} 段：\n{chunk}"
+            )
+        if len(chunks) > 6:
+            yield event.plain_result(
+                f"JSON 过长，已省略后续 {len(chunks) - 6} 段。"
+            )
+
     @filter.command("帮助")
     async def help(self, event: AstrMessageEvent):
         """发送明日方舟助手命令帮助。
@@ -890,6 +945,7 @@ class MyPlugin(Star):
             f"{config.BIND_FORMAT}\n"
             "/查询基础信息\n"
             "/查询肉鸽 [傀影|水月|萨米|萨卡兹|topicId]\n"
+            "/调试肉鸽JSON [傀影|水月|萨米|萨卡兹|topicId]\n"
             "/帮助\n"
             "绑定会使用森空岛账号登录，只保存查询所需凭据和角色 UID。"
         )
