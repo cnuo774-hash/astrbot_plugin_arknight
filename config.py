@@ -223,6 +223,102 @@ html, body {
                 </div>
             </div>
         </div>
+
+        <div style="
+            padding-top: 4px;
+        ">
+            <div style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 14px;
+            ">
+                <div style="
+                    color: #e2e8f0;
+                    font-size: 24px;
+                    font-weight: 820;
+                ">助战干员</div>
+                <div style="
+                    color: #64748b;
+                    font-size: 18px;
+                    font-weight: 700;
+                ">SUPPORT UNITS</div>
+            </div>
+
+            <div style="
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 16px;
+            ">
+                {% for assist in assist_chars %}
+                <div style="
+                    padding: 18px 20px;
+                    border-radius: 8px;
+                    background: #20252d;
+                    border: 1px solid rgba(148, 163, 184, 0.22);
+                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+                ">
+                    <div style="
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 12px;
+                    ">
+                        <div style="
+                            min-width: 0;
+                            color: #ffffff;
+                            font-size: 28px;
+                            font-weight: 850;
+                            line-height: 1.15;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            white-space: nowrap;
+                        ">{{ assist.name }}</div>
+                        <div style="
+                            flex-shrink: 0;
+                            color: #38bdf8;
+                            font-size: 20px;
+                            font-weight: 800;
+                        ">#{{ assist.index }}</div>
+                    </div>
+
+                    <div style="
+                        margin-top: 12px;
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 8px;
+                    ">
+                        <div style="font-size: 18px; color: #cbd5e1;">{{ assist.level }}</div>
+                        <div style="font-size: 18px; color: #cbd5e1;">{{ assist.potential }}</div>
+                        <div style="font-size: 18px; color: #cbd5e1;">{{ assist.skill }}</div>
+                        <div style="font-size: 18px; color: #cbd5e1;">{{ assist.favor }}</div>
+                    </div>
+
+                    <div style="
+                        margin-top: 10px;
+                        padding-top: 10px;
+                        border-top: 1px solid rgba(148, 163, 184, 0.16);
+                        color: #94a3b8;
+                        font-size: 18px;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                    ">{{ assist.equip }}</div>
+                </div>
+                {% endfor %}
+
+                {% if not assist_chars %}
+                <div style="
+                    grid-column: span 3;
+                    padding: 18px 20px;
+                    border-radius: 8px;
+                    background: #20252d;
+                    color: #94a3b8;
+                    font-size: 22px;
+                ">未返回助战干员信息</div>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 '''

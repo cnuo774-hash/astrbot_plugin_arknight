@@ -504,6 +504,82 @@ class MyPlugin(Star):
             or self._find_value(player_info, ("skinCnt", "skinCount"))
             or "未返回"
         )
+        assist_chars = self._find_value(player_info, ("assistChars",))
+        assist_chars = assist_chars if isinstance(assist_chars, list) else []
+        char_info_map = self._find_value(player_info, ("charInfoMap",))
+        char_info_map = char_info_map if isinstance(char_info_map, dict) else {}
+        equipment_info_map = self._find_value(player_info, ("equipmentInfoMap",))
+        equipment_info_map = (
+            equipment_info_map if isinstance(equipment_info_map, dict) else {}
+        )
+        assist_data = []
+        for index, assist in enumerate(assist_chars[:3], start=1):
+            if not isinstance(assist, dict):
+                continue
+            char_id = str(assist.get("charId") or "")
+            char_info = char_info_map.get(char_id, {})
+            if not isinstance(char_info, dict):
+                char_info = {}
+            char_name = char_info.get("name") or char_id or "未返回"
+            evolve_phase = assist.get("evolvePhase")
+            if evolve_phase in (0, "0"):
+                phase = "精零"
+            elif evolve_phase in (1, "1"):
+                phase = "精一"
+            elif evolve_phase in (2, "2"):
+                phase = "精二"
+            else:
+                phase = "精英化未知"
+            level_text = f"{phase} Lv.{assist.get('level', '未知')}"
+            potential = assist.get("potentialRank")
+            potential_text = "潜能未知"
+            if potential not in (None, ""):
+                potential_text = f"潜能 {int(potential) + 1}"
+
+            default_skill_id = assist.get("defaultSkillId")
+            selected_skill = {}
+            skills = assist.get("skills")
+            if isinstance(skills, list):
+                for skill in skills:
+                    if (
+                        isinstance(skill, dict)
+                        and skill.get("id") == default_skill_id
+                    ):
+                        selected_skill = skill
+                        break
+                if not selected_skill and skills and isinstance(skills[0], dict):
+                    selected_skill = skills[0]
+            specialize_level = selected_skill.get("specializeLevel")
+            if specialize_level not in (None, "") and int(specialize_level) > 0:
+                skill_text = f"技能专精 {specialize_level}"
+            else:
+                skill_text = f"技能等级 {assist.get('mainSkillLvl', '未知')}"
+
+            equip_id = assist.get("defaultEquipId") or ""
+            equip = assist.get("equip")
+            if isinstance(equip, dict):
+                equip_id = equip.get("id") or equip_id
+            elif isinstance(equip, list):
+                for item in equip:
+                    if isinstance(item, dict) and item.get("id") == equip_id:
+                        equip_id = item.get("id") or equip_id
+                        break
+            equip_info = equipment_info_map.get(equip_id, {})
+            equip_text = "模组 无"
+            if isinstance(equip_info, dict) and equip_id:
+                equip_text = equip_info.get("typeName") or "模组 已装备"
+            favor = assist.get("favorPercent", "未知")
+            assist_data.append(
+                {
+                    "index": index,
+                    "name": char_name,
+                    "level": level_text,
+                    "potential": potential_text,
+                    "skill": skill_text,
+                    "equip": equip_text,
+                    "favor": f"信赖 {favor}%",
+                }
+            )
         avatar_value = self._find_value(
             player_info,
             ("avatar", "avatarUrl", "avatarImage", "icon"),
@@ -518,6 +594,7 @@ class MyPlugin(Star):
             "recovery_time": recovery_time,
             "char_count": char_count,
             "skin_count": skin_count,
+            "assist_chars": assist_data,
             "avatar_url": avatar_url,
             "channel_name": binding.get("channelName") or "未返回",
         }
@@ -531,6 +608,8 @@ class MyPlugin(Star):
             f"理智恢复时间：{recovery_time}\n"
             f"干员数：{char_count}\n"
             f"时装数：{skin_count}\n"
+            "助战干员："
+            f"{'、'.join(item['name'] for item in assist_data) or '未返回'}\n"
             f"头像：{avatar_url or '未返回'}"
         )
         return text, card_data
@@ -629,7 +708,8 @@ class MyPlugin(Star):
         except Exception as exc:
             logger.warning(f"渲染明日方舟基础信息图片失败：{exc}")
             yield event.plain_result(
-                "抱歉，查询失败，请稍后重试"
+                "图片渲染服务暂时不可用，先返回文字版：\n"
+                f"{text}"
             )
             return
 

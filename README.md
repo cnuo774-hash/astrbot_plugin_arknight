@@ -1,14 +1,75 @@
-# astrbot-plugin-helloworld
+# 明日方舟助手
 
-AstrBot 插件模板 / A template plugin for AstrBot plugin feature
+基于森空岛 API 的 AstrBot 插件，用于绑定森空岛账号并查询明日方舟基础玩家信息。
 
-> [!NOTE]
-> This repo is just a template of [AstrBot](https://github.com/AstrBotDevs/AstrBot) Plugin.
-> 
-> [AstrBot](https://github.com/AstrBotDevs/AstrBot) is an agentic assistant for both personal and group conversations. It can be deployed across dozens of mainstream instant messaging platforms, including QQ, Telegram, Feishu, DingTalk, Slack, LINE, Discord, Matrix, etc. In addition, it provides a reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you need a personal AI companion, an intelligent customer support agent, an automation assistant, or an enterprise knowledge base, AstrBot enables you to quickly build AI applications directly within your existing messaging workflows.
+## 功能
 
-# Supports
+- 绑定森空岛账号并保存查询所需凭据。
+- 查询明日方舟角色基础信息。
+- 生成基础信息卡片。
+- 展示等级、注册日期、主线进度、渠道、理智恢复时间、干员数、时装数。
+- 展示最多 3 个助战干员的等级、潜能、技能、信赖和模组信息。
+- 当图片渲染服务不可用时，自动返回文字版查询结果。
 
-- [AstrBot Repo](https://github.com/AstrBotDevs/AstrBot)
-- [AstrBot Plugin Development Docs (Chinese)](https://docs.astrbot.app/dev/star/plugin-new.html)
-- [AstrBot Plugin Development Docs (English)](https://docs.astrbot.app/en/dev/star/plugin-new.html)
+## 命令
+
+```text
+/绑定账号 手机号 密码
+/查询基础信息
+/帮助
+```
+
+绑定示例：
+
+```text
+/绑定账号 13800138000 your_password
+```
+
+查询示例：
+
+```text
+/查询基础信息
+```
+
+## 数据来源
+
+插件通过鹰角账号登录获取森空岛凭据，然后调用森空岛接口查询已绑定的明日方舟角色信息。
+
+当前使用的数据主要来自：
+
+- 角色绑定列表
+- 玩家基础信息
+- 理智状态
+- 干员和时装统计
+- 助战干员信息
+
+## 隐私说明
+
+绑定命令会使用森空岛账号手机号和密码登录。插件不会保存密码，只会保存后续查询所需的森空岛凭据、角色 UID、昵称和渠道信息。
+
+建议在私聊中使用绑定命令，避免账号密码暴露在群聊中。如果已经在截图或群聊中泄露密码，请及时修改森空岛或鹰角账号密码。
+
+## 常见问题
+
+### 提示图片渲染服务不可用
+
+这通常不是森空岛查询失败，而是 AstrBot 使用的 T2I 图片渲染服务返回错误。插件会自动返回文字版查询结果。
+
+### 提示森空岛请求异常
+
+请确认插件版本已包含森空岛签名请求头逻辑。森空岛业务接口需要 `sign`、`timestamp` 等请求头，仅携带 `cred` 无法稳定查询。
+
+### 绑定成功但查询不到信息
+
+请确认森空岛账号已经绑定明日方舟角色，并且使用的是当前 QQ 账号对应的 AstrBot 会话。
+
+## 开发说明
+
+插件入口为 `main.py`，常量和 HTML 卡片模板位于 `config.py`。
+
+修改后建议运行：
+
+```bash
+ruff format .
+ruff check .
+```
