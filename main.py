@@ -189,9 +189,7 @@ class MyPlugin(Star):
         try:
             payload_data = json.loads(response_body)
         except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"{api_name}失败：接口返回不是有效 JSON"
-            ) from exc
+            raise ValueError(f"{api_name}失败：接口返回不是有效 JSON") from exc
         return self._extract_data(payload_data, api_name)
 
     async def _create_skland_credential(
@@ -284,10 +282,7 @@ class MyPlugin(Star):
             "vName": "",
         }
         header_ca_str = json.dumps(header_for_sign, separators=(",", ":"))
-        secret = (
-            f"{parsed_url.path}{parsed_url.query}"
-            f"{timestamp}{header_ca_str}"
-        )
+        secret = f"{parsed_url.path}{parsed_url.query}{timestamp}{header_ca_str}"
         hex_secret = hmac.new(
             str(token).encode("utf-8"),
             secret.encode("utf-8"),
@@ -402,10 +397,7 @@ class MyPlugin(Star):
             roles = game.get("bindingList", [])
             if roles:
                 return roles[0]
-        raise ValueError(
-            "森空岛角色绑定查询失败："
-            "未找到已绑定的明日方舟角色"
-        )
+        raise ValueError("森空岛角色绑定查询失败：未找到已绑定的明日方舟角色")
 
     async def _get_player_info(self, binding: dict[str, Any]) -> dict[str, Any]:
         """从森空岛获取明日方舟玩家信息。
@@ -885,10 +877,7 @@ class MyPlugin(Star):
             skills = assist.get("skills")
             if isinstance(skills, list):
                 for skill in skills:
-                    if (
-                        isinstance(skill, dict)
-                        and skill.get("id") == default_skill_id
-                    ):
+                    if isinstance(skill, dict) and skill.get("id") == default_skill_id:
                         selected_skill = skill
                         break
                 if not selected_skill and skills and isinstance(skills[0], dict):
@@ -981,9 +970,7 @@ class MyPlugin(Star):
 
         uid = str(role.get("uid", ""))
         if not uid:
-            yield event.plain_result(
-                "绑定失败：森空岛未返回明日方舟 UID"
-            )
+            yield event.plain_result("绑定失败：森空岛未返回明日方舟 UID")
             return
 
         data = self._read_bindings()
@@ -999,9 +986,7 @@ class MyPlugin(Star):
 
         role_name = role.get("nickName") or uid
         channel_name = role.get("channelName", "未知渠道")
-        yield event.plain_result(
-            f"绑定成功：{role_name}（{channel_name}，UID：{uid}）"
-        )
+        yield event.plain_result(f"绑定成功：{role_name}（{channel_name}，UID：{uid}）")
 
     @filter.command("查询基础信息")
     async def check_arknight_information(self, event: AstrMessageEvent):
@@ -1015,8 +1000,7 @@ class MyPlugin(Star):
         binding = data.get(user_id)
         if not binding:
             yield event.plain_result(
-                "你还没有绑定账号，请先发送：\n"
-                f"{config.BIND_FORMAT}"
+                f"你还没有绑定账号，请先发送：\n{config.BIND_FORMAT}"
             )
             return
         if isinstance(binding, str):
@@ -1050,10 +1034,7 @@ class MyPlugin(Star):
             )
         except Exception as exc:
             logger.warning(f"渲染明日方舟基础信息图片失败：{exc}")
-            yield event.plain_result(
-                "图片渲染服务暂时不可用，先返回文字版：\n"
-                f"{text}"
-            )
+            yield event.plain_result(f"图片渲染服务暂时不可用，先返回文字版：\n{text}")
             return
 
         yield event.image_result(image)
@@ -1075,8 +1056,7 @@ class MyPlugin(Star):
         binding = data.get(user_id)
         if not binding:
             yield event.plain_result(
-                "你还没有绑定账号，请先发送：\n"
-                f"{config.BIND_FORMAT}"
+                f"你还没有绑定账号，请先发送：\n{config.BIND_FORMAT}"
             )
             return
         if isinstance(binding, str):
@@ -1111,10 +1091,7 @@ class MyPlugin(Star):
             )
         except Exception as exc:
             logger.warning(f"渲染明日方舟肉鸽战绩图片失败：{exc}")
-            yield event.plain_result(
-                "图片渲染服务暂时不可用，先返回文字版：\n"
-                f"{text}"
-            )
+            yield event.plain_result(f"图片渲染服务暂时不可用，先返回文字版：\n{text}")
             return
 
         yield event.image_result(image)

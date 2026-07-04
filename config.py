@@ -16,8 +16,7 @@ ROGUE_URL = "https://zonai.skland.com/api/v1/game/arknights/rogue"
 
 REQUEST_TIMEOUT = 15
 SKLAND_USER_AGENT = (
-    "Skland/1.32.1 (com.hypergryph.skland; build:103201004; "
-    "Android 33; ) Okhttp/4.11.0"
+    "Skland/1.32.1 (com.hypergryph.skland; build:103201004; Android 33; ) Okhttp/4.11.0"
 )
 DEFAULT_HEADERS = {
     "User-Agent": SKLAND_USER_AGENT,
@@ -45,7 +44,7 @@ BIND_PROMPT = (
     "插件只会保存查询所需的森空岛凭据和角色 UID，"
     "不会保存密码。"
 )
-TMPL = '''
+TMPL = """
 <style>
 html, body {
     margin: 0;
@@ -335,9 +334,9 @@ html, body {
         </div>
     </div>
 </div>
-'''
+"""
 
-ROGUE_TMPL = '''
+ROGUE_TMPL = """
 <style>
 html, body {
     margin: 0;
@@ -794,4 +793,4 @@ html, body {
         </div>
     </div>
 </div>
-'''
+"""

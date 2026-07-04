@@ -82,9 +82,3 @@
 
 插件入口为 `main.py`，常量和 HTML 卡片模板位于 `config.py`。
 
-修改后建议运行：
-
-```bash
-ruff format .
-ruff check .
-```
