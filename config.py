@@ -11,6 +11,8 @@ GRANT_URL = "https://as.hypergryph.com/user/oauth2/v2/grant"
 CRED_URL = "https://zonai.skland.com/api/v1/user/auth/generate_cred_by_code"
 BINDING_URL = "https://zonai.skland.com/api/v1/game/player/binding"
 PLAYER_URL = "https://zonai.skland.com/api/v1/game/player/info"
+USER_ID_URL = "https://zonai.skland.com/api/v1/user/teenager"
+ROGUE_URL = "https://zonai.skland.com/api/v1/game/arknights/rogue"
 
 REQUEST_TIMEOUT = 15
 SKLAND_USER_AGENT = (
@@ -27,6 +29,13 @@ SKLAND_SIGN_HEADERS = {
 }
 
 BIND_FORMAT = "/绑定账号 手机号 密码"
+ROGUE_TOPICS = {
+    "傀影": "rogue_1",
+    "水月": "rogue_2",
+    "萨米": "rogue_3",
+    "萨卡兹": "rogue_4",
+    "默认": "rogue_4",
+}
 BIND_PROMPT = (
     "绑定需要使用森空岛账号的私密信息，请在私聊中发送：\n"
     f"{BIND_FORMAT}\n"
@@ -290,8 +299,11 @@ html, body {
                     ">
                         <div style="font-size: 18px; color: #cbd5e1;">{{ assist.level }}</div>
                         <div style="font-size: 18px; color: #cbd5e1;">{{ assist.potential }}</div>
-                        <div style="font-size: 18px; color: #cbd5e1;">{{ assist.skill }}</div>
-                        <div style="font-size: 18px; color: #cbd5e1;">{{ assist.favor }}</div>
+                        <div style="
+                            grid-column: span 2;
+                            font-size: 18px;
+                            color: #cbd5e1;
+                        ">{{ assist.skill }}</div>
                     </div>
 
                     <div style="

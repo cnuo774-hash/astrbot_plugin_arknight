@@ -432,6 +432,129 @@ class MyPlugin(Star):
         )
         return data if isinstance(data, dict) else {"raw": data}
 
+    async def _get_skland_user_id(self, binding: dict[str, Any]) -> str:
+        """从森空岛获取账号 userId。
+
+        Args:
+            binding: 已存储的账号绑定数据。
+
+        Returns:
+            森空岛账号 userId。
+
+        Raises:
+            ValueError: 当接口未返回 userId 时抛出。
+        """
+        data = await self._get_json(
+            config.USER_ID_URL,
+            self._skland_headers(binding, config.USER_ID_URL),
+            "森空岛账号 ID 查询",
+        )
+        teenager = data.get("teenager") if isinstance(data, dict) else None
+        user_id = teenager.get("userId") if isinstance(teenager, dict) else None
+        if not user_id:
+            raise ValueError("森空岛账号 ID 查询失败：未返回 userId")
+        return str(user_id)
+
+    async def _get_rogue_record(
+        self,
+        binding: dict[str, Any],
+        topic_id: str,
+    ) -> dict[str, Any]:
+        """从森空岛获取肉鸽战绩数据。
+
+        Args:
+            binding: 已存储的账号绑定数据。
+            topic_id: 肉鸽主题 ID。
+
+        Returns:
+            森空岛肉鸽战绩数据。
+
+        Raises:
+            ValueError: 当缺少 UID 或请求失败时抛出。
+        """
+        uid = str(binding.get("uid", ""))
+        if not uid:
+            raise ValueError("查询失败：未找到已绑定的明日方舟 UID")
+        user_id = await self._get_skland_user_id(binding)
+        params = {
+            "uid": uid,
+            "targetUserId": user_id,
+            "topicId": topic_id,
+        }
+        data = await self._get_json(
+            config.ROGUE_URL,
+            self._skland_headers(binding, config.ROGUE_URL, params),
+            "森空岛肉鸽战绩查询",
+            params,
+        )
+        return data if isinstance(data, dict) else {"raw": data}
+
+    def _format_rogue_record(
+        self,
+        topic_name: str,
+        topic_id: str,
+        rogue_data: dict[str, Any],
+    ) -> str:
+        """将肉鸽战绩数据格式化为聊天文本。
+
+        Args:
+            topic_name: 用户输入或匹配到的主题名。
+            topic_id: 肉鸽主题 ID。
+            rogue_data: 森空岛返回的肉鸽数据。
+
+        Returns:
+            可发送到聊天窗口的肉鸽战绩摘要。
+        """
+        summary_keys = (
+            "level",
+            "exp",
+            "score",
+            "scoreMax",
+            "rank",
+            "medal",
+            "relicCnt",
+            "collectionCnt",
+            "investment",
+            "bank",
+            "passCnt",
+            "endingCnt",
+        )
+        lines = [f"明日方舟肉鸽战绩（{topic_name} / {topic_id}）"]
+        for key in summary_keys:
+            value = self._find_value(rogue_data, (key,))
+            if value not in (None, "") and not isinstance(value, (dict, list)):
+                lines.append(f"{key}：{value}")
+
+        records = self._find_value(
+            rogue_data,
+            ("records", "record", "history", "historyList"),
+        )
+        if isinstance(records, list) and records:
+            lines.append("最近记录：")
+            for record in records[:3]:
+                if not isinstance(record, dict):
+                    continue
+                mode = (
+                    record.get("mode")
+                    or record.get("difficulty")
+                    or record.get("topic")
+                    or "未知模式"
+                )
+                score = record.get("score") or record.get("point") or "未知分数"
+                ts = (
+                    record.get("ts")
+                    or record.get("time")
+                    or record.get("endTime")
+                    or record.get("finishTs")
+                )
+                time_text = self._format_date(ts) if ts else "未知时间"
+                lines.append(f"- {time_text} / {mode} / {score}")
+
+        if len(lines) == 1:
+            raw_text = json.dumps(rogue_data, ensure_ascii=False)[:1200]
+            lines.append(f"接口已返回数据，但暂未识别摘要字段：\n{raw_text}")
+        return "\n".join(lines)
+
     def _format_player_info(
         self,
         binding: dict[str, Any],
@@ -568,7 +691,6 @@ class MyPlugin(Star):
             equip_text = "模组 无"
             if isinstance(equip_info, dict) and equip_id:
                 equip_text = equip_info.get("typeName") or "模组 已装备"
-            favor = assist.get("favorPercent", "未知")
             assist_data.append(
                 {
                     "index": index,
@@ -577,7 +699,6 @@ class MyPlugin(Star):
                     "potential": potential_text,
                     "skill": skill_text,
                     "equip": equip_text,
-                    "favor": f"信赖 {favor}%",
                 }
             )
         avatar_value = self._find_value(
@@ -715,6 +836,48 @@ class MyPlugin(Star):
 
         yield event.image_result(image)
 
+    @filter.command("查询肉鸽")
+    async def check_rogue_record(
+        self,
+        event: AstrMessageEvent,
+        topic: str = "默认",
+    ):
+        """查询发送者的明日方舟集成战略战绩。
+
+        Args:
+            event: AstrBot 消息事件。
+            topic: 可选肉鸽主题名或原始 topicId。
+        """
+        user_id = event.get_sender_id()
+        data = self._read_bindings()
+        binding = data.get(user_id)
+        if not binding:
+            yield event.plain_result(
+                "你还没有绑定账号，请先发送：\n"
+                f"{config.BIND_FORMAT}"
+            )
+            return
+        if isinstance(binding, str):
+            yield event.plain_result(
+                "当前绑定数据是旧格式，无法调用森空岛官方 API 查询。"
+                "请重新发送：\n"
+                f"{config.BIND_FORMAT}"
+            )
+            return
+
+        topic_name = topic.strip() or "默认"
+        topic_id = config.ROGUE_TOPICS.get(topic_name, topic_name)
+        try:
+            rogue_data = await self._get_rogue_record(binding, topic_id)
+        except ValueError as exc:
+            logger.warning(f"查询明日方舟肉鸽战绩失败：{exc}")
+            yield event.plain_result(str(exc))
+            return
+
+        yield event.plain_result(
+            self._format_rogue_record(topic_name, topic_id, rogue_data)
+        )
+
     @filter.command("帮助")
     async def help(self, event: AstrMessageEvent):
         """发送明日方舟助手命令帮助。
@@ -726,6 +889,7 @@ class MyPlugin(Star):
             "明日方舟助手命令\n"
             f"{config.BIND_FORMAT}\n"
             "/查询基础信息\n"
+            "/查询肉鸽 [傀影|水月|萨米|萨卡兹|topicId]\n"
             "/帮助\n"
             "绑定会使用森空岛账号登录，只保存查询所需凭据和角色 UID。"
         )
