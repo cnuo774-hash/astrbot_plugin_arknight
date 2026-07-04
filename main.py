@@ -494,66 +494,287 @@ class MyPlugin(Star):
         topic_name: str,
         topic_id: str,
         rogue_data: dict[str, Any],
-    ) -> str:
-        """将肉鸽战绩数据格式化为聊天文本。
+    ) -> tuple[str, dict[str, Any]]:
+        """Format rogue record data for text fallback and image rendering.
 
         Args:
-            topic_name: 用户输入或匹配到的主题名。
-            topic_id: 肉鸽主题 ID。
-            rogue_data: 森空岛返回的肉鸽数据。
+            topic_name: User input topic name.
+            topic_id: Rogue topic ID.
+            rogue_data: Skland rogue API data.
 
         Returns:
-            可发送到聊天窗口的肉鸽战绩摘要。
+            Text fallback and template data for rendering.
         """
-        summary_keys = (
-            "level",
-            "exp",
-            "score",
-            "scoreMax",
-            "rank",
-            "medal",
-            "relicCnt",
-            "collectionCnt",
-            "investment",
-            "bank",
-            "passCnt",
-            "endingCnt",
-        )
-        lines = [f"明日方舟肉鸽战绩（{topic_name} / {topic_id}）"]
-        for key in summary_keys:
-            value = self._find_value(rogue_data, (key,))
-            if value not in (None, "") and not isinstance(value, (dict, list)):
-                lines.append(f"{key}：{value}")
+        topics_raw = rogue_data.get("topics")
+        topics_raw = topics_raw if isinstance(topics_raw, list) else []
+        selected_topic = {}
+        for item in topics_raw:
+            if isinstance(item, dict) and item.get("id") == topic_id:
+                selected_topic = item
+                break
+        if not selected_topic:
+            for item in topics_raw:
+                if isinstance(item, dict) and item.get("isSelected"):
+                    selected_topic = item
+                    break
+        if not selected_topic and topics_raw and isinstance(topics_raw[0], dict):
+            selected_topic = topics_raw[0]
 
-        records = self._find_value(
-            rogue_data,
-            ("records", "record", "history", "historyList"),
-        )
-        if isinstance(records, list) and records:
-            lines.append("最近记录：")
-            for record in records[:3]:
-                if not isinstance(record, dict):
+        history = rogue_data.get("history")
+        history = history if isinstance(history, dict) else {}
+        career = rogue_data.get("career")
+        career = career if isinstance(career, dict) else {}
+        all_data = rogue_data.get("all")
+        all_data = all_data if isinstance(all_data, dict) else {}
+        game_user_info = rogue_data.get("gameUserInfo")
+        game_user_info = game_user_info if isinstance(game_user_info, dict) else {}
+
+        clear_info = career.get("clearInfo")
+        clear_info = clear_info if isinstance(clear_info, dict) else {}
+        medal = history.get("medal")
+        medal = medal if isinstance(medal, dict) else {}
+        medal_current = medal.get("current")
+        medal_count = medal.get("count")
+        medal_text = "未返回"
+        if medal_current not in (None, "") and medal_count not in (None, ""):
+            medal_text = f"{medal_current}/{medal_count}"
+
+        topic_display_name = (
+            selected_topic.get("name") if isinstance(selected_topic, dict) else ""
+        ) or topic_name
+        if isinstance(selected_topic, dict):
+            hero_pic = selected_topic.get("pic") or selected_topic.get("titlePic") or ""
+        else:
+            hero_pic = ""
+        mode = history.get("mode") or clear_info.get("difficulty") or "未返回"
+
+        def display(value: Any) -> str:
+            if value in (None, ""):
+                return "未返回"
+            return str(value)
+
+        hero_metrics = [
+            {
+                "name": "难度等级",
+                "value": display(history.get("modeGrade") or clear_info.get("grade")),
+                "color": "#f3b563",
+            },
+            {
+                "name": "本期积分",
+                "value": display(history.get("score")),
+                "color": "#d94d3f",
+            },
+            {
+                "name": "里程碑",
+                "value": display(history.get("bpLevel")),
+                "color": "#5bbf8a",
+            },
+            {"name": "勋章收集", "value": medal_text, "color": "#8fb6ff"},
+            {
+                "name": "最近记录",
+                "value": display(len(history.get("records") or [])),
+                "color": "#d8d1c4",
+            },
+            {
+                "name": "最高通关",
+                "value": display(clear_info.get("difficulty")),
+                "color": "#c78ad9",
+            },
+        ]
+
+        topics = []
+        for item in topics_raw:
+            if not isinstance(item, dict):
+                continue
+            item_id = item.get("id") or ""
+            topics.append(
+                {
+                    "id": item_id,
+                    "name": item.get("name") or item_id or "未知主题",
+                    "pic": item.get("pic") or item.get("titlePic") or "",
+                    "selected": item_id == topic_id or bool(item.get("isSelected")),
+                }
+            )
+
+        records_raw = history.get("records")
+        records_raw = records_raw if isinstance(records_raw, list) else []
+        records = []
+        for record in records_raw[:5]:
+            if not isinstance(record, dict):
+                continue
+            start_ts = record.get("startTs")
+            end_ts = record.get("endTs")
+            duration = "未知用时"
+            if str(start_ts).isdigit() and str(end_ts).isdigit():
+                seconds = max(0, int(end_ts) - int(start_ts))
+                hours = seconds // 3600
+                minutes = seconds % 3600 // 60
+                remain_seconds = seconds % 60
+                duration = f"{hours:02d}:{minutes:02d}:{remain_seconds:02d}"
+
+            band = record.get("band")
+            band_name = band.get("name") if isinstance(band, dict) else ""
+            last_chars = record.get("lastChars")
+            last_chars = last_chars if isinstance(last_chars, list) else []
+            char_names = []
+            for char in last_chars[:6]:
+                if not isinstance(char, dict):
                     continue
-                mode = (
-                    record.get("mode")
-                    or record.get("difficulty")
-                    or record.get("topic")
-                    or "未知模式"
-                )
-                score = record.get("score") or record.get("point") or "未知分数"
-                ts = (
-                    record.get("ts")
-                    or record.get("time")
-                    or record.get("endTime")
-                    or record.get("finishTs")
-                )
-                time_text = self._format_date(ts) if ts else "未知时间"
-                lines.append(f"- {time_text} / {mode} / {score}")
+                char_name = char.get("name") or "未知干员"
+                phase = char.get("evolvePhase")
+                level = char.get("level")
+                if phase in (None, "") or level in (None, ""):
+                    char_names.append(char_name)
+                else:
+                    char_names.append(f"{char_name} 精{phase} Lv.{level}")
+            normal = int(record.get("cntBattleNormal") or 0)
+            elite = int(record.get("cntBattleElite") or 0)
+            boss = int(record.get("cntBattleBoss") or 0)
+            records.append(
+                {
+                    "date": self._format_date(end_ts),
+                    "band": band_name or "未知分队",
+                    "stage": record.get("lastStage") or "未知节点",
+                    "result": (
+                        "已通关"
+                        if record.get("success") in (True, 1, "1")
+                        else "未通关"
+                    ),
+                    "grade": display(record.get("modeGrade")),
+                    "score": display(record.get("score")),
+                    "duration": duration,
+                    "zones": display(record.get("cntCrossedZone")),
+                    "nodes": display(record.get("cntArrivedNode")),
+                    "battles": normal + elite + boss,
+                    "relics": display(record.get("cntGainRelicItem")),
+                    "recruits": display(record.get("cntRecruitUpgrade")),
+                    "chars": " / ".join(char_names) or "未返回干员",
+                }
+            )
 
-        if len(lines) == 1:
+        chars = []
+        for char in (history.get("chars") or [])[:8]:
+            if not isinstance(char, dict):
+                continue
+            char_name = char.get("name") or "未知干员"
+            phase = char.get("evolvePhase")
+            level = char.get("level")
+            if phase in (None, "") or level in (None, ""):
+                chars.append(char_name)
+            else:
+                chars.append(f"{char_name} 精{phase} Lv.{level}")
+
+        career_metrics = [
+            {"name": "投资", "value": display(career.get("invest"))},
+            {"name": "源石锭", "value": display(career.get("gold"))},
+            {"name": "经过节点", "value": display(career.get("node"))},
+            {"name": "获得希望", "value": display(career.get("hope"))},
+            {"name": "晋升次数", "value": display(career.get("upgrade"))},
+            {"name": "收藏品", "value": display(career.get("relic"))},
+            {"name": "远行次数", "value": display(career.get("travel"))},
+            {"name": "累计步数", "value": display(career.get("step"))},
+        ]
+
+        popular_items = []
+        for label, key in (
+            ("支援道具", "activeTool"),
+            ("常用收藏", "relic"),
+            ("灾厄年代", "disaster"),
+        ):
+            values = all_data.get(key)
+            if not isinstance(values, list) or not values:
+                continue
+            names = [
+                item.get("name")
+                for item in values[:3]
+                if isinstance(item, dict) and item.get("name")
+            ]
+            if names:
+                popular_items.append(f"{label}: {'、'.join(names)}")
+
+        profession_names = {
+            "CASTER": "术师",
+            "MEDIC": "医疗",
+            "PIONEER": "先锋",
+            "SNIPER": "狙击",
+            "SPECIAL": "特种",
+            "SUPPORT": "辅助",
+            "TANK": "重装",
+            "WARRIOR": "近卫",
+        }
+        character_data = all_data.get("character")
+        if isinstance(character_data, dict):
+            for profession, value in character_data.items():
+                if len(popular_items) >= 11:
+                    break
+                if not isinstance(value, dict):
+                    continue
+                char_list = value.get("list")
+                if not isinstance(char_list, list) or not char_list:
+                    continue
+                char = char_list[0]
+                if isinstance(char, dict) and char.get("name"):
+                    profession_text = profession_names.get(profession, profession)
+                    popular_items.append(f"{profession_text}: {char['name']}")
+
+        endings = []
+        ending_data = all_data.get("endings")
+        if isinstance(ending_data, dict):
+            for key in sorted(
+                ending_data,
+                key=lambda item: int(item) if item.isdigit() else 0,
+            ):
+                value = ending_data.get(key)
+                try:
+                    percent = float(value)
+                except (TypeError, ValueError):
+                    continue
+                endings.append(
+                    {
+                        "name": f"结局 {key}",
+                        "value": f"{percent:g}",
+                        "width": min(100, max(0, percent)),
+                    }
+                )
+
+        card_data = {
+            "topic_name": topic_display_name,
+            "topic_id": topic_id,
+            "hero_pic": hero_pic,
+            "mode": mode,
+            "player_name": game_user_info.get("name") or "未返回",
+            "player_level": display(game_user_info.get("level")),
+            "avatar_url": self._extract_avatar_url(game_user_info.get("avatar")),
+            "medal_text": f"勋章 {medal_text}",
+            "hero_metrics": hero_metrics,
+            "topics": topics,
+            "record_count": len(records_raw),
+            "records": records,
+            "career_metrics": career_metrics,
+            "chars": chars,
+            "popular_items": popular_items,
+            "endings": endings,
+        }
+
+        lines = [
+            f"明日方舟肉鸽战绩（{topic_display_name} / {topic_id}）",
+            f"玩家：{card_data['player_name']} Lv.{card_data['player_level']}",
+            f"难度：{mode} {display(history.get('modeGrade'))}",
+            f"积分：{display(history.get('score'))}",
+            f"里程碑：{display(history.get('bpLevel'))}",
+            f"勋章：{medal_text}",
+        ]
+        if records:
+            lines.append("最近探索：")
+            for record in records[:3]:
+                lines.append(
+                    f"- {record['date']} / {record['band']} / "
+                    f"{record['stage']} / {record['score']} 分"
+                )
+        else:
             raw_text = json.dumps(rogue_data, ensure_ascii=False)[:1200]
-            lines.append(f"接口已返回数据，但暂未识别摘要字段：\n{raw_text}")
-        return "\n".join(lines)
+            lines.append(f"接口已返回数据，但暂未识别最近探索记录：\n{raw_text}")
+        return "\n".join(lines), card_data
 
     def _format_player_info(
         self,
@@ -840,13 +1061,11 @@ class MyPlugin(Star):
     async def check_rogue_record(
         self,
         event: AstrMessageEvent,
-        topic: str = "默认",
     ):
-        """查询发送者的明日方舟集成战略战绩。
+        """查询发送者的明日方舟集成战略总览。
 
         Args:
             event: AstrBot 消息事件。
-            topic: 可选肉鸽主题名或原始 topicId。
         """
         user_id = event.get_sender_id()
         data = self._read_bindings()
@@ -865,8 +1084,8 @@ class MyPlugin(Star):
             )
             return
 
-        topic_name = topic.strip() or "默认"
-        topic_id = config.ROGUE_TOPICS.get(topic_name, topic_name)
+        topic_name = "默认"
+        topic_id = config.ROGUE_TOPICS["默认"]
         try:
             rogue_data = await self._get_rogue_record(binding, topic_id)
         except ValueError as exc:
@@ -874,64 +1093,27 @@ class MyPlugin(Star):
             yield event.plain_result(str(exc))
             return
 
-        yield event.plain_result(
-            self._format_rogue_record(topic_name, topic_id, rogue_data)
-        )
-
-    @filter.command("调试肉鸽JSON")
-    async def debug_rogue_json(
-        self,
-        event: AstrMessageEvent,
-        topic: str = "默认",
-    ):
-        """输出肉鸽接口返回的原始 JSON，便于确认字段结构。
-
-        Args:
-            event: AstrBot 消息事件。
-            topic: 可选肉鸽主题名或原始 topicId。
-        """
-        user_id = event.get_sender_id()
-        data = self._read_bindings()
-        binding = data.get(user_id)
-        if not binding:
-            yield event.plain_result(
-                "你还没有绑定账号，请先发送：\n"
-                f"{config.BIND_FORMAT}"
-            )
-            return
-        if isinstance(binding, str):
-            yield event.plain_result(
-                "当前绑定数据是旧格式，无法调用森空岛官方 API 查询。"
-                "请重新发送：\n"
-                f"{config.BIND_FORMAT}"
-            )
-            return
-
-        topic_name = topic.strip() or "默认"
-        topic_id = config.ROGUE_TOPICS.get(topic_name, topic_name)
+        text, card_data = self._format_rogue_record(topic_name, topic_id, rogue_data)
         try:
-            rogue_data = await self._get_rogue_record(binding, topic_id)
-        except ValueError as exc:
-            logger.warning(f"调试明日方舟肉鸽 JSON 失败：{exc}")
-            yield event.plain_result(str(exc))
+            image = await self.html_render(
+                config.ROGUE_TMPL,
+                card_data,
+                return_url=True,
+                options={
+                    "full_page": True,
+                    "type": "png",
+                    "viewport": {"width": 1280, "height": 1100},
+                },
+            )
+        except Exception as exc:
+            logger.warning(f"渲染明日方舟肉鸽战绩图片失败：{exc}")
+            yield event.plain_result(
+                "图片渲染服务暂时不可用，先返回文字版：\n"
+                f"{text}"
+            )
             return
 
-        json_text = json.dumps(rogue_data, ensure_ascii=False, indent=2)
-        header = f"肉鸽 JSON（{topic_name} / {topic_id}）\n"
-        chunk_size = 1500
-        chunks = [
-            json_text[index : index + chunk_size]
-            for index in range(0, len(json_text), chunk_size)
-        ]
-        for index, chunk in enumerate(chunks[:6], start=1):
-            prefix = header if index == 1 else ""
-            yield event.plain_result(
-                f"{prefix}第 {index}/{len(chunks)} 段：\n{chunk}"
-            )
-        if len(chunks) > 6:
-            yield event.plain_result(
-                f"JSON 过长，已省略后续 {len(chunks) - 6} 段。"
-            )
+        yield event.image_result(image)
 
     @filter.command("帮助")
     async def help(self, event: AstrMessageEvent):
@@ -944,8 +1126,7 @@ class MyPlugin(Star):
             "明日方舟助手命令\n"
             f"{config.BIND_FORMAT}\n"
             "/查询基础信息\n"
-            "/查询肉鸽 [傀影|水月|萨米|萨卡兹|topicId]\n"
-            "/调试肉鸽JSON [傀影|水月|萨米|萨卡兹|topicId]\n"
+            "/查询肉鸽\n"
             "/帮助\n"
             "绑定会使用森空岛账号登录，只保存查询所需凭据和角色 UID。"
         )
