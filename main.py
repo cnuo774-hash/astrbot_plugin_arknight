@@ -1028,6 +1028,7 @@ class MyPlugin(Star):
             )
             return
 
+        yield event.plain_result("正在查询，请稍后...")
         try:
             player_info = await self._get_player_info(binding)
         except ValueError as exc:
@@ -1061,11 +1062,13 @@ class MyPlugin(Star):
     async def check_rogue_record(
         self,
         event: AstrMessageEvent,
+        topic: str = "默认",
     ):
-        """查询发送者的明日方舟集成战略总览。
+        """查询发送者的明日方舟集成战略战绩。
 
         Args:
             event: AstrBot 消息事件。
+            topic: 可选肉鸽主题名或原始 topicId。
         """
         user_id = event.get_sender_id()
         data = self._read_bindings()
@@ -1084,8 +1087,9 @@ class MyPlugin(Star):
             )
             return
 
-        topic_name = "默认"
-        topic_id = config.ROGUE_TOPICS["默认"]
+        topic_name = topic.strip() or "默认"
+        topic_id = config.ROGUE_TOPICS.get(topic_name, topic_name)
+        yield event.plain_result("正在查询，请稍后...")
         try:
             rogue_data = await self._get_rogue_record(binding, topic_id)
         except ValueError as exc:
@@ -1126,7 +1130,7 @@ class MyPlugin(Star):
             "明日方舟助手命令\n"
             f"{config.BIND_FORMAT}\n"
             "/查询基础信息\n"
-            "/查询肉鸽\n"
+            "/查询肉鸽 [傀影|水月|萨米|萨卡兹|岁|topicId]\n"
             "/帮助\n"
             "绑定会使用森空岛账号登录，只保存查询所需凭据和角色 UID。"
         )
