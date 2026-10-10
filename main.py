@@ -4,7 +4,11 @@ import asyncio
 import hashlib
 import hmac
 import json
+import math
+import re
 from datetime import datetime
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
 from urllib import error, parse, request
 
@@ -19,7 +23,7 @@ from . import config
     "Arknight_helper",
     "bsnqwq",
     "一个帮助查询明日方舟信息的插件",
-    "1.0.0",
+    "1.1.0",
 )
 class MyPlugin(Star):
     def __init__(self, context: Context):
@@ -38,27 +42,54 @@ class MyPlugin(Star):
 
         Returns:
             AstrBot 发送者 ID 到森空岛绑定数据的映射。
+
+        Raises:
+            ValueError: If the binding file is unreadable or malformed.
         """
         if not config.arknight_name_file.exists():
             return {}
         try:
-            with config.arknight_name_file.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-        except json.JSONDecodeError:
-            logger.warning("明日方舟绑定 JSON 无效，将使用空数据。")
-            return {}
+            contents = config.arknight_name_file.read_text(encoding="utf-8")
+            data = json.loads(contents) if contents.strip() else {}
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                "读取账号绑定数据失败，请检查绑定文件，原数据已保留。"
+            ) from exc
         if isinstance(data, dict):
             return data
-        return {}
+        raise ValueError("账号绑定数据格式异常，请检查绑定文件，原数据已保留。")
 
     def _write_bindings(self, data: dict[str, Any]) -> None:
         """将账号绑定数据写入插件 JSON 文件。
 
         Args:
             data: AstrBot 发送者 ID 到森空岛绑定数据的映射。
+
+        Raises:
+            ValueError: If the binding file cannot be saved.
         """
-        with config.arknight_name_file.open("w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        temporary_path = None
+        try:
+            with NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=config.arknight_name_file.parent,
+                prefix=f".{config.arknight_name_file.name}.",
+                delete=False,
+            ) as f:
+                temporary_path = Path(f.name)
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            temporary_path.replace(config.arknight_name_file)
+        except OSError as exc:
+            raise ValueError(
+                "保存账号绑定数据失败，请检查绑定文件的写入权限。"
+            ) from exc
+        finally:
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink(missing_ok=True)
+                except OSError:
+                    logger.warning("清理临时账号绑定文件失败。")
 
     def _extract_data(self, payload: dict[str, Any], api_name: str) -> Any:
         """校验 API 响应并返回 data 字段。
@@ -73,6 +104,8 @@ class MyPlugin(Star):
         Raises:
             ValueError: 当接口返回错误状态时抛出。
         """
+        if not isinstance(payload, dict):
+            raise ValueError(f"{api_name}失败：接口响应格式异常")
         status = payload.get("status")
         code = payload.get("code")
         if status not in (None, 0):
@@ -81,7 +114,9 @@ class MyPlugin(Star):
         if code not in (None, 0):
             message = payload.get("message") or payload.get("msg") or "未知错误"
             raise ValueError(f"{api_name}失败：{message}")
-        return payload.get("data", payload)
+        if "data" not in payload or payload["data"] is None:
+            raise ValueError(f"{api_name}失败：接口未返回 data 数据")
+        return payload["data"]
 
     async def _post_json(
         self,
@@ -182,9 +217,12 @@ class MyPlugin(Star):
                 payload_data = json.loads(response_body)
             except json.JSONDecodeError as json_exc:
                 raise ValueError(f"{api_name}失败：HTTP {exc.code}") from json_exc
-            return self._extract_data(payload_data, api_name)
+            self._extract_data(payload_data, api_name)
+            raise ValueError(f"{api_name}失败：HTTP {exc.code}") from exc
         except (OSError, TimeoutError) as exc:
             raise ValueError(f"{api_name}失败：网络请求异常：{exc}") from exc
+        except UnicodeError as exc:
+            raise ValueError(f"{api_name}失败：接口响应编码异常") from exc
 
         try:
             payload_data = json.loads(response_body)
@@ -218,7 +256,9 @@ class MyPlugin(Star):
             },
             "鹰角账号登录",
         )
-        account_token = login_data.get("token")
+        account_token = (
+            login_data.get("token") if isinstance(login_data, dict) else None
+        )
         if not account_token:
             raise ValueError("鹰角账号登录失败：未返回登录 token")
 
@@ -231,7 +271,7 @@ class MyPlugin(Star):
             },
             "鹰角授权",
         )
-        grant_code = grant_data.get("code")
+        grant_code = grant_data.get("code") if isinstance(grant_data, dict) else None
         if not grant_code:
             raise ValueError("鹰角授权失败：未返回授权 code")
 
@@ -240,10 +280,10 @@ class MyPlugin(Star):
             {"code": grant_code, "kind": 1},
             "森空岛凭据生成",
         )
-        cred = cred_data.get("cred")
-        skland_token = cred_data.get("token", "")
-        if not cred:
-            raise ValueError("森空岛凭据生成失败：未返回 cred")
+        cred = cred_data.get("cred") if isinstance(cred_data, dict) else None
+        skland_token = cred_data.get("token") if isinstance(cred_data, dict) else None
+        if not cred or not skland_token:
+            raise ValueError("森空岛凭据生成失败：未返回完整的 cred 和 token")
         return {"cred": cred, "token": skland_token}
 
     def _skland_headers(
@@ -265,10 +305,10 @@ class MyPlugin(Star):
         Raises:
             ValueError: 当凭据缺少签名所需 token 时抛出。
         """
-        cred = str(binding.get("cred", ""))
+        cred = binding.get("cred")
         token = binding.get("token")
-        if not token:
-            raise ValueError("森空岛请求签名失败：缺少 token")
+        if not cred or not token:
+            raise ValueError("森空岛凭据不完整，请重新私聊绑定账号。")
 
         signed_url = url
         if params:
@@ -291,7 +331,7 @@ class MyPlugin(Star):
         signature = hashlib.md5(hex_secret.encode("utf-8")).hexdigest()
         return {
             **config.SKLAND_SIGN_HEADERS,
-            "cred": cred,
+            "cred": str(cred),
             "sign": signature,
             **header_for_sign,
         }
@@ -359,14 +399,17 @@ class MyPlugin(Star):
         """
         if value in (None, ""):
             return "未返回"
-        if isinstance(value, (int, float)):
-            timestamp = value / 1000 if value > 10_000_000_000 else value
-            return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
         text = str(value)
-        if text.isdigit():
-            timestamp = int(text)
-            timestamp = timestamp / 1000 if timestamp > 10_000_000_000 else timestamp
-            return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
+        if isinstance(value, (int, float)) or text.isdigit():
+            try:
+                timestamp = float(value)
+                if timestamp > 10_000_000_000:
+                    timestamp /= 1000
+                return datetime.fromtimestamp(timestamp, config.GAME_TIMEZONE).strftime(
+                    "%Y-%m-%d"
+                )
+            except (OverflowError, OSError, ValueError):
+                return "未返回"
         return text.split("T", 1)[0]
 
     async def _get_arknights_role(
@@ -391,11 +434,15 @@ class MyPlugin(Star):
         )
 
         games = data.get("list", []) if isinstance(data, dict) else []
+        games = games if isinstance(games, list) else []
         for game in games:
-            if game.get("appCode") != config.ARKNIGHTS_APP_CODE:
+            if (
+                not isinstance(game, dict)
+                or game.get("appCode") != config.ARKNIGHTS_APP_CODE
+            ):
                 continue
             roles = game.get("bindingList", [])
-            if roles:
+            if isinstance(roles, list) and roles and isinstance(roles[0], dict):
                 return roles[0]
         raise ValueError("森空岛角色绑定查询失败：未找到已绑定的明日方舟角色")
 
@@ -411,7 +458,7 @@ class MyPlugin(Star):
         Raises:
             ValueError: 当请求失败时抛出。
         """
-        uid = str(binding.get("uid", ""))
+        uid = str(binding.get("uid") or "")
         if not uid:
             raise ValueError("查询失败：未找到已绑定的明日方舟 UID")
 
@@ -422,7 +469,9 @@ class MyPlugin(Star):
             "森空岛基础信息查询",
             params,
         )
-        return data if isinstance(data, dict) else {"raw": data}
+        if not isinstance(data, dict):
+            raise ValueError("森空岛基础信息查询失败：接口数据格式异常")
+        return data
 
     async def _get_skland_user_id(self, binding: dict[str, Any]) -> str:
         """从森空岛获取账号 userId。
@@ -464,7 +513,7 @@ class MyPlugin(Star):
         Raises:
             ValueError: 当缺少 UID 或请求失败时抛出。
         """
-        uid = str(binding.get("uid", ""))
+        uid = str(binding.get("uid") or "")
         if not uid:
             raise ValueError("查询失败：未找到已绑定的明日方舟 UID")
         user_id = await self._get_skland_user_id(binding)
@@ -479,7 +528,9 @@ class MyPlugin(Star):
             "森空岛肉鸽战绩查询",
             params,
         )
-        return data if isinstance(data, dict) else {"raw": data}
+        if not isinstance(data, dict):
+            raise ValueError("森空岛肉鸽战绩查询失败：接口数据格式异常")
+        return data
 
     def _format_rogue_record(
         self,
@@ -496,21 +547,23 @@ class MyPlugin(Star):
 
         Returns:
             Text fallback and template data for rendering.
+
+        Raises:
+            ValueError: If the API returns a different rogue topic.
         """
         topics_raw = rogue_data.get("topics")
         topics_raw = topics_raw if isinstance(topics_raw, list) else []
-        selected_topic = {}
-        for item in topics_raw:
-            if isinstance(item, dict) and item.get("id") == topic_id:
-                selected_topic = item
-                break
-        if not selected_topic:
-            for item in topics_raw:
-                if isinstance(item, dict) and item.get("isSelected"):
-                    selected_topic = item
-                    break
-        if not selected_topic and topics_raw and isinstance(topics_raw[0], dict):
-            selected_topic = topics_raw[0]
+        topics_raw = [item for item in topics_raw if isinstance(item, dict)]
+        selected_topic = next(
+            (item for item in topics_raw if item.get("id") == topic_id), {}
+        )
+        selected_ids = {item.get("id") for item in topics_raw if item.get("isSelected")}
+        if (topics_raw and not selected_topic) or (
+            selected_ids and topic_id not in selected_ids
+        ):
+            raise ValueError(
+                f"森空岛未返回请求主题 {topic_id} 的战绩，请稍后重试或查询其他主题。"
+            )
 
         history = rogue_data.get("history")
         history = history if isinstance(history, dict) else {}
@@ -531,16 +584,29 @@ class MyPlugin(Star):
         if medal_current not in (None, "") and medal_count not in (None, ""):
             medal_text = f"{medal_current}/{medal_count}"
 
-        topic_display_name = (
-            selected_topic.get("name") if isinstance(selected_topic, dict) else ""
-        ) or topic_name
-        if isinstance(selected_topic, dict):
-            hero_pic = selected_topic.get("pic") or selected_topic.get("titlePic") or ""
-        else:
-            hero_pic = ""
-        mode = history.get("mode") or clear_info.get("difficulty") or "未返回"
+        topic_display_name = selected_topic.get("name") or config.ROGUE_TOPIC_NAMES.get(
+            topic_id, topic_name
+        )
+        hero_pic = selected_topic.get("pic") or selected_topic.get("titlePic") or ""
+        mode = history.get("mode")
+        if mode in (None, ""):
+            mode = clear_info.get("difficulty")
+        grade = history.get("modeGrade")
+        if grade in (None, ""):
+            grade = clear_info.get("grade")
+        records_raw = history.get("records")
+        records_raw = records_raw if isinstance(records_raw, list) else []
+        records_raw = [record for record in records_raw if isinstance(record, dict)]
 
         def display(value: Any) -> str:
+            """Format a metric while retaining zero values.
+
+            Args:
+                value: API metric value.
+
+            Returns:
+                Metric text or a placeholder for missing values.
+            """
             if value in (None, ""):
                 return "未返回"
             return str(value)
@@ -548,7 +614,7 @@ class MyPlugin(Star):
         hero_metrics = [
             {
                 "name": "难度等级",
-                "value": display(history.get("modeGrade") or clear_info.get("grade")),
+                "value": display(grade),
                 "color": "#f3b563",
             },
             {
@@ -564,7 +630,7 @@ class MyPlugin(Star):
             {"name": "勋章收集", "value": medal_text, "color": "#8fb6ff"},
             {
                 "name": "最近记录",
-                "value": display(len(history.get("records") or [])),
+                "value": display(len(records_raw)),
                 "color": "#d8d1c4",
             },
             {
@@ -576,33 +642,35 @@ class MyPlugin(Star):
 
         topics = []
         for item in topics_raw:
-            if not isinstance(item, dict):
-                continue
             item_id = item.get("id") or ""
             topics.append(
                 {
                     "id": item_id,
                     "name": item.get("name") or item_id or "未知主题",
                     "pic": item.get("pic") or item.get("titlePic") or "",
-                    "selected": item_id == topic_id or bool(item.get("isSelected")),
+                    "selected": item_id == topic_id,
                 }
             )
 
-        records_raw = history.get("records")
-        records_raw = records_raw if isinstance(records_raw, list) else []
         records = []
         for record in records_raw[:5]:
-            if not isinstance(record, dict):
-                continue
             start_ts = record.get("startTs")
             end_ts = record.get("endTs")
             duration = "未知用时"
-            if str(start_ts).isdigit() and str(end_ts).isdigit():
-                seconds = max(0, int(end_ts) - int(start_ts))
+            try:
+                start = float(start_ts)
+                end = float(end_ts)
+                if start > 10_000_000_000:
+                    start /= 1000
+                if end > 10_000_000_000:
+                    end /= 1000
+                seconds = max(0, int(end - start))
                 hours = seconds // 3600
                 minutes = seconds % 3600 // 60
                 remain_seconds = seconds % 60
                 duration = f"{hours:02d}:{minutes:02d}:{remain_seconds:02d}"
+            except (TypeError, ValueError, OverflowError):
+                pass
 
             band = record.get("band")
             band_name = band.get("name") if isinstance(band, dict) else ""
@@ -619,9 +687,13 @@ class MyPlugin(Star):
                     char_names.append(char_name)
                 else:
                     char_names.append(f"{char_name} 精{phase} Lv.{level}")
-            normal = int(record.get("cntBattleNormal") or 0)
-            elite = int(record.get("cntBattleElite") or 0)
-            boss = int(record.get("cntBattleBoss") or 0)
+            try:
+                battles = sum(
+                    int(record.get(key) or 0)
+                    for key in ("cntBattleNormal", "cntBattleElite", "cntBattleBoss")
+                )
+            except (TypeError, ValueError, OverflowError):
+                battles = "未返回"
             records.append(
                 {
                     "date": self._format_date(end_ts),
@@ -637,7 +709,7 @@ class MyPlugin(Star):
                     "duration": duration,
                     "zones": display(record.get("cntCrossedZone")),
                     "nodes": display(record.get("cntArrivedNode")),
-                    "battles": normal + elite + boss,
+                    "battles": battles,
                     "relics": display(record.get("cntGainRelicItem")),
                     "recruits": display(record.get("cntRecruitUpgrade")),
                     "chars": " / ".join(char_names) or "未返回干员",
@@ -645,7 +717,9 @@ class MyPlugin(Star):
             )
 
         chars = []
-        for char in (history.get("chars") or [])[:8]:
+        chars_raw = history.get("chars")
+        chars_raw = chars_raw if isinstance(chars_raw, list) else []
+        for char in chars_raw[:8]:
             if not isinstance(char, dict):
                 continue
             char_name = char.get("name") or "未知干员"
@@ -660,12 +734,45 @@ class MyPlugin(Star):
             {"name": "投资", "value": display(career.get("invest"))},
             {"name": "源石锭", "value": display(career.get("gold"))},
             {"name": "经过节点", "value": display(career.get("node"))},
-            {"name": "获得希望", "value": display(career.get("hope"))},
+            {"name": "消耗希望", "value": display(career.get("hope"))},
             {"name": "晋升次数", "value": display(career.get("upgrade"))},
             {"name": "收藏品", "value": display(career.get("relic"))},
             {"name": "远行次数", "value": display(career.get("travel"))},
             {"name": "累计步数", "value": display(career.get("step"))},
         ]
+        if topic_id == "rogue_6":
+            career_metrics = [
+                {"name": label, "value": display(career.get(key))}
+                for label, key in (
+                    ("非林间空地节点", "node"),
+                    ("消耗希望", "hope"),
+                    ("晋升次数", "upgrade"),
+                    ("先行一步次数", "expedition"),
+                    ("培育种子次数", "scrapIdentify"),
+                    ("消耗行动力", "moveCostAp"),
+                    ("徒步跋涉次数", "moveWalk"),
+                    ("加工品移动次数", "moveVehicle"),
+                    ("迁走居民据点", "settleSavage"),
+                    ("抵御流窜居民", "settleBandit"),
+                    ("误入奇境次数", "teleportIn"),
+                )
+            ]
+            for section, fields in (
+                (
+                    "scrap",
+                    (("出售零件数", "recycle"), ("零件售卖收益", "profit")),
+                ),
+                (
+                    "weather",
+                    (("理想域节点数", "node"), ("消除实托邦次数", "negativeClear")),
+                ),
+            ):
+                values = career.get(section)
+                values = values if isinstance(values, dict) else {}
+                career_metrics.extend(
+                    {"name": label, "value": display(values.get(key))}
+                    for label, key in fields
+                )
 
         popular_items = []
         for label, key in (
@@ -682,7 +789,24 @@ class MyPlugin(Star):
                 if isinstance(item, dict) and item.get("name")
             ]
             if names:
-                popular_items.append(f"{label}: {'、'.join(names)}")
+                popular_items.append(f"全服{label}: {'、'.join(names)}")
+        if topic_id == "rogue_6":
+            scrap = career.get("scrap")
+            scrap = scrap if isinstance(scrap, dict) else {}
+            weather = career.get("weather")
+            weather = weather if isinstance(weather, dict) else {}
+            for label, values in (
+                ("个人常用加工品", scrap.get("top3Use")),
+                ("个人常遇实托邦", weather.get("top3")),
+            ):
+                if isinstance(values, list):
+                    names = [
+                        str(item["name"])
+                        for item in values[:3]
+                        if isinstance(item, dict) and item.get("name")
+                    ]
+                    if names:
+                        popular_items.append(f"{label}: {'、'.join(names)}")
 
         profession_names = {
             "CASTER": "术师",
@@ -707,7 +831,7 @@ class MyPlugin(Star):
                 char = char_list[0]
                 if isinstance(char, dict) and char.get("name"):
                     profession_text = profession_names.get(profession, profession)
-                    popular_items.append(f"{profession_text}: {char['name']}")
+                    popular_items.append(f"全服{profession_text}: {char['name']}")
 
         endings = []
         ending_data = all_data.get("endings")
@@ -721,9 +845,11 @@ class MyPlugin(Star):
                     percent = float(value)
                 except (TypeError, ValueError):
                     continue
+                if not math.isfinite(percent):
+                    continue
                 endings.append(
                     {
-                        "name": f"结局 {key}",
+                        "name": f"通关 {key} 个结局",
                         "value": f"{percent:g}",
                         "width": min(100, max(0, percent)),
                     }
@@ -733,7 +859,7 @@ class MyPlugin(Star):
             "topic_name": topic_display_name,
             "topic_id": topic_id,
             "hero_pic": hero_pic,
-            "mode": mode,
+            "mode": display(mode),
             "player_name": game_user_info.get("name") or "未返回",
             "player_level": display(game_user_info.get("level")),
             "avatar_url": self._extract_avatar_url(game_user_info.get("avatar")),
@@ -751,21 +877,25 @@ class MyPlugin(Star):
         lines = [
             f"明日方舟肉鸽战绩（{topic_display_name} / {topic_id}）",
             f"玩家：{card_data['player_name']} Lv.{card_data['player_level']}",
-            f"难度：{mode} {display(history.get('modeGrade'))}",
+            f"难度：{display(mode)} {display(grade)}",
             f"积分：{display(history.get('score'))}",
             f"里程碑：{display(history.get('bpLevel'))}",
             f"勋章：{medal_text}",
+            "生涯累计：",
+            *(f"- {item['name']}：{item['value']}" for item in career_metrics),
         ]
         if records:
             lines.append("最近探索：")
             for record in records[:3]:
                 lines.append(
                     f"- {record['date']} / {record['band']} / "
-                    f"{record['stage']} / {record['score']} 分"
+                    f"{record['stage']} / {record['result']} / "
+                    f"难度 {record['grade']} / {record['score']} 分 / {record['duration']}"
                 )
         else:
-            raw_text = json.dumps(rogue_data, ensure_ascii=False)[:1200]
-            lines.append(f"接口已返回数据，但暂未识别最近探索记录：\n{raw_text}")
+            lines.append("暂无最近探索记录，请确认该主题已有游玩记录并已同步至森空岛。")
+        if popular_items:
+            lines.extend(["偏好统计：", *popular_items])
         return "\n".join(lines), card_data
 
     def _format_player_info(
@@ -782,12 +912,19 @@ class MyPlugin(Star):
         Returns:
             包含兜底文本输出和模板数据的元组。
         """
+        status = player_info.get("status")
+        status = status if isinstance(status, dict) else {}
         nickname = (
-            self._find_value(player_info, ("nickName", "nickname", "name"))
+            self._find_value(status, ("nickName", "nickname", "name"))
             or binding.get("nickName")
+            or self._find_value(player_info, ("nickName", "nickname", "name"))
             or "未返回"
         )
-        level = self._find_value(player_info, ("level", "playerLevel")) or "未返回"
+        level = self._find_value(status, ("level", "playerLevel"))
+        if level in (None, ""):
+            level = self._find_value(player_info, ("level", "playerLevel"))
+        if level in (None, ""):
+            level = "未返回"
         registered_at = self._format_date(
             self._find_value(
                 player_info,
@@ -801,8 +938,6 @@ class MyPlugin(Star):
             )
             or "未返回"
         )
-        status = self._find_value(player_info, ("status",))
-        status = status if isinstance(status, dict) else {}
         ap = status.get("ap") or self._find_value(player_info, ("ap",))
         recovery_time = "未返回"
         if isinstance(ap, dict):
@@ -810,36 +945,32 @@ class MyPlugin(Star):
             max_ap = ap.get("max")
             complete_recovery_time = ap.get("completeRecoveryTime")
             if complete_recovery_time not in (None, ""):
-                complete_recovery_time = int(complete_recovery_time)
-                timestamp = (
-                    complete_recovery_time / 1000
-                    if complete_recovery_time > 10_000_000_000
-                    else complete_recovery_time
-                )
-                if timestamp <= datetime.now().timestamp():
-                    recovery_time = "已回满"
-                elif max_ap is not None and current_ap is not None:
-                    recovery_time = (
-                        "已回满"
-                        if int(current_ap) >= int(max_ap)
-                        else datetime.fromtimestamp(timestamp).strftime(
-                            "%Y-%m-%d %H:%M"
-                        )
-                    )
-                else:
-                    recovery_time = datetime.fromtimestamp(timestamp).strftime(
-                        "%Y-%m-%d %H:%M"
-                    )
-        char_count = (
-            status.get("charCnt")
-            or self._find_value(player_info, ("charCnt", "charCount"))
-            or "未返回"
-        )
-        skin_count = (
-            status.get("skinCnt")
-            or self._find_value(player_info, ("skinCnt", "skinCount"))
-            or "未返回"
-        )
+                try:
+                    timestamp = float(complete_recovery_time)
+                    if timestamp > 10_000_000_000:
+                        timestamp /= 1000
+                    if timestamp <= datetime.now().timestamp() or (
+                        max_ap is not None
+                        and current_ap is not None
+                        and int(current_ap) >= int(max_ap)
+                    ):
+                        recovery_time = "已回满"
+                    else:
+                        recovery_time = datetime.fromtimestamp(
+                            timestamp, config.GAME_TIMEZONE
+                        ).strftime("%Y-%m-%d %H:%M")
+                except (TypeError, ValueError, OverflowError, OSError):
+                    pass
+        char_count = self._find_value(status, ("charCnt", "charCount"))
+        if char_count in (None, ""):
+            char_count = self._find_value(player_info, ("charCnt", "charCount"))
+        if char_count in (None, ""):
+            char_count = "未返回"
+        skin_count = self._find_value(status, ("skinCnt", "skinCount"))
+        if skin_count in (None, ""):
+            skin_count = self._find_value(player_info, ("skinCnt", "skinCount"))
+        if skin_count in (None, ""):
+            skin_count = "未返回"
         assist_chars = self._find_value(player_info, ("assistChars",))
         assist_chars = assist_chars if isinstance(assist_chars, list) else []
         char_info_map = self._find_value(player_info, ("charInfoMap",))
@@ -968,21 +1099,26 @@ class MyPlugin(Star):
             yield event.plain_result(str(exc))
             return
 
-        uid = str(role.get("uid", ""))
+        uid = str(role.get("uid") or "")
         if not uid:
             yield event.plain_result("绑定失败：森空岛未返回明日方舟 UID")
             return
 
-        data = self._read_bindings()
-        data[user_id] = {
-            "uid": uid,
-            "nickName": role.get("nickName", ""),
-            "channelName": role.get("channelName", ""),
-            "cred": credential["cred"],
-            "token": credential.get("token", ""),
-            "updatedAt": datetime.now().isoformat(timespec="seconds"),
-        }
-        self._write_bindings(data)
+        try:
+            data = self._read_bindings()
+            data[user_id] = {
+                "uid": uid,
+                "nickName": role.get("nickName", ""),
+                "channelName": role.get("channelName", ""),
+                "cred": credential["cred"],
+                "token": credential.get("token", ""),
+                "updatedAt": datetime.now().isoformat(timespec="seconds"),
+            }
+            self._write_bindings(data)
+        except ValueError as exc:
+            logger.warning(f"保存明日方舟账号绑定失败：{exc}")
+            yield event.plain_result(str(exc))
+            return
 
         role_name = role.get("nickName") or uid
         channel_name = role.get("channelName", "未知渠道")
@@ -996,14 +1132,18 @@ class MyPlugin(Star):
             event: AstrBot 消息事件。
         """
         user_id = event.get_sender_id()
-        data = self._read_bindings()
+        try:
+            data = self._read_bindings()
+        except ValueError as exc:
+            yield event.plain_result(str(exc))
+            return
         binding = data.get(user_id)
         if not binding:
             yield event.plain_result(
                 f"你还没有绑定账号，请先发送：\n{config.BIND_FORMAT}"
             )
             return
-        if isinstance(binding, str):
+        if not isinstance(binding, dict):
             yield event.plain_result(
                 "当前绑定数据是旧格式，"
                 "无法调用森空岛官方 API 查询。"
@@ -1015,12 +1155,12 @@ class MyPlugin(Star):
         yield event.plain_result("正在查询，请稍后...")
         try:
             player_info = await self._get_player_info(binding)
+            text, card_data = self._format_player_info(binding, player_info)
         except ValueError as exc:
             logger.warning(f"查询明日方舟基础信息失败：{exc}")
             yield event.plain_result(str(exc))
             return
 
-        text, card_data = self._format_player_info(binding, player_info)
         try:
             image = await self.html_render(
                 config.TMPL,
@@ -1052,14 +1192,18 @@ class MyPlugin(Star):
             topic: 可选肉鸽主题名或原始 topicId。
         """
         user_id = event.get_sender_id()
-        data = self._read_bindings()
+        try:
+            data = self._read_bindings()
+        except ValueError as exc:
+            yield event.plain_result(str(exc))
+            return
         binding = data.get(user_id)
         if not binding:
             yield event.plain_result(
                 f"你还没有绑定账号，请先发送：\n{config.BIND_FORMAT}"
             )
             return
-        if isinstance(binding, str):
+        if not isinstance(binding, dict):
             yield event.plain_result(
                 "当前绑定数据是旧格式，无法调用森空岛官方 API 查询。"
                 "请重新发送：\n"
@@ -1069,15 +1213,22 @@ class MyPlugin(Star):
 
         topic_name = topic.strip() or "默认"
         topic_id = config.ROGUE_TOPICS.get(topic_name, topic_name)
+        if not re.fullmatch(r"rogue_[1-9]\d*", topic_id):
+            yield event.plain_result(
+                f"未知肉鸽主题：{topic_name}\n{config.ROGUE_COMMAND_HELP}"
+            )
+            return
         yield event.plain_result("正在查询，请稍后...")
         try:
             rogue_data = await self._get_rogue_record(binding, topic_id)
+            text, card_data = self._format_rogue_record(
+                topic_name, topic_id, rogue_data
+            )
         except ValueError as exc:
             logger.warning(f"查询明日方舟肉鸽战绩失败：{exc}")
             yield event.plain_result(str(exc))
             return
 
-        text, card_data = self._format_rogue_record(topic_name, topic_id, rogue_data)
         try:
             image = await self.html_render(
                 config.ROGUE_TMPL,
@@ -1107,7 +1258,8 @@ class MyPlugin(Star):
             "明日方舟助手命令\n"
             f"{config.BIND_FORMAT}\n"
             "/查询基础信息\n"
-            "/查询肉鸽 [傀影|水月|萨米|萨卡兹|岁|topicId]\n"
+            f"{config.ROGUE_COMMAND_HELP}\n"
+            "肉鸽默认查询沉沦者的黑流树海，也可使用完整主题名或 rogue_6。\n"
             "/帮助\n"
             "绑定会使用森空岛账号登录，只保存查询所需凭据和角色 UID。"
         )

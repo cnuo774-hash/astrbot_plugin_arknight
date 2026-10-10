@@ -1,3 +1,4 @@
+from datetime import timedelta, timezone
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parent
@@ -15,6 +16,7 @@ USER_ID_URL = "https://zonai.skland.com/api/v1/user/teenager"
 ROGUE_URL = "https://zonai.skland.com/api/v1/game/arknights/rogue"
 
 REQUEST_TIMEOUT = 15
+GAME_TIMEZONE = timezone(timedelta(hours=8))
 SKLAND_USER_AGENT = (
     "Skland/1.32.1 (com.hypergryph.skland; build:103201004; Android 33; ) Okhttp/4.11.0"
 )
@@ -35,8 +37,22 @@ ROGUE_TOPICS = {
     "萨卡兹": "rogue_4",
     "岁": "rogue_5",
     "界园": "rogue_5",
-    "默认": "rogue_4",
+    "黑流树海": "rogue_6",
+    "黑流": "rogue_6",
+    "树海": "rogue_6",
+    "沉沦者": "rogue_6",
+    "默认": "rogue_6",
 }
+ROGUE_TOPIC_NAMES = {
+    "rogue_1": "傀影与猩红孤钻",
+    "rogue_2": "水月与深蓝之树",
+    "rogue_3": "探索者的银凇止境",
+    "rogue_4": "萨卡兹的无终奇语",
+    "rogue_5": "岁的界园志异",
+    "rogue_6": "沉沦者的黑流树海",
+}
+ROGUE_TOPICS.update({name: topic_id for topic_id, name in ROGUE_TOPIC_NAMES.items()})
+ROGUE_COMMAND_HELP = "/查询肉鸽 [傀影|水月|萨米|萨卡兹|岁|黑流树海|topicId]"
 BIND_PROMPT = (
     "绑定需要使用森空岛账号的私密信息，请在私聊中发送：\n"
     f"{BIND_FORMAT}\n"
@@ -474,7 +490,7 @@ html, body {
 }
 .topic-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 12px;
 }
 .topic {
@@ -607,7 +623,7 @@ html, body {
 }
 .ending-row {
     display: grid;
-    grid-template-columns: 72px 1fr 62px;
+    grid-template-columns: 120px 1fr 62px;
     align-items: center;
     gap: 10px;
     margin-top: 9px;
@@ -720,7 +736,7 @@ html, body {
                 {% endfor %}
                 {% if not records %}
                 <div class="record">
-                    <div class="record-title">未返回最近探索记录</div>
+                    <div class="record-title">暂无最近探索记录</div>
                 </div>
                 {% endif %}
             </div>
@@ -774,7 +790,7 @@ html, body {
 
             <div class="panel section">
                 <div class="section-head">
-                    <div class="section-title">结局占比</div>
+                    <div class="section-title">全服结局占比</div>
                     <div class="section-note">ENDING RATE</div>
                 </div>
                 {% for ending in endings %}
